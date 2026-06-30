@@ -1,1 +1,6 @@
-Test
+C:\Sogie>curl -u "Usewr:pass2" -H "X-Requested-With:curl" "https://qualysguard.qg.sogei.it/api/2.0/fo/subscription/option_profile/?action=export" > Export-OP.xml
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+curl: (35) schannel: next InitializeSecurityContext failed: CRYPT_E_REVOCATION_OFFLINE (0x80092013) - The revocation function was unable to check revocation because the revocation server was offline.
+
