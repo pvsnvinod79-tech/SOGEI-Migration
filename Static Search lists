@@ -1,1 +1,23 @@
-curl --ssl-no-revoke -u "Usewr:pass2" -H "X-Requested-With:curl" "https://qualysguard.qg.sogei.it/api/2.0/fo/subscription/option_profile/?action=export" > Export-OP.xml
+<?xml version="1.0" encoding="UTF-8"?>
+
+-<SIMPLE_RETURN>
+
+
+-<RESPONSE>
+
+<DATETIME>2026-06-30T09:33:36Z</DATETIME>
+
+<CODE>2510</CODE>
+
+<TEXT>API URL https://qualysguard.qg.sogei.it/api/3.0/fo/subscription/option_profile/index.php is EOL. Use new API path https://qualysguard.qg.sogei.it/api/4.0/fo/subscription/option_profile/index.php </TEXT>
+
+</RESPONSE>
+
+</SIMPLE_RETURN>
+
+
+
+C:\Sogie>curl --ssl-no-revoke -u "User:Pass" -H "X-Requested-With:curl" "https://qualysguard.qg.sogei.it/api/3.0/fo/subscription/option_profile/?action=export" > Export-OP.xml
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   381    0   381    0     0   1029      0 --:--:-- --:--:-- --:--:--  1070
