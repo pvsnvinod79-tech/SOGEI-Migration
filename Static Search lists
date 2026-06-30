@@ -1,1 +1,26 @@
-curl --ssl-no-revoke -u "User:Pass" -H "X-Requested-With:curl" "https://qualysguard.qg.sogei.it/api/4.0/fo/subscription/option_profile/index.php?action=export" > Export-OP.xml
+ 	Yes 	Standard 	CertView (default) 	Alessandro Todini 	26 Aug 2024
+	Yes 	Standard 	Scansione Autenticata MIM (STD port) 	Alessandro Todini 	05 Sep 2024
+	Yes 	Standard 	SOGEI_vCenter_ESXi 	Alessandro Todini 	26 Aug 2024
+	  	Standard 	Todini_Temp 	Alessandro Todini 	17 Feb 2025
+	Yes 	Standard 	Analisi Password: Autenticazione Password 	Alessio Madonia 	26 Aug 2024
+	  	Standard 	Analisi Password: Password Weak O Nulle 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	Authenticated Scan v.1_prova_IoT_Bleb_GW 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	Authentication STANDARD porte_test 	Alessio Madonia 	26 Aug 2024
+	  	Standard 	CertViewFree Profile 	Alessio Madonia 	26 Aug 2024
+	  	Standard 	Critical External Scan 	Alessio Madonia 	29 Aug 2025
+	Yes 	Standard 	External Scan 	Alessio Madonia 	12 Aug 2025
+	Yes 	Standard 	External Scan without Ping 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	Initial Options (default) 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	LOW Performance Scan 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	Risultati Autenticazione Win/Unix 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	Scansione Autenticata FULL porte 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	Scansione NO Autenticata FULL porte 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	TEST no exclusion 	Alessio Madonia 	19 Sep 2025
+	Yes 	Standard 	Test Verifica Autenticazione 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	vCenter ESXi Autenticato 	Alessio Madonia 	26 Aug 2024
+	Yes 	Standard 	Initial Profile_CVE-2025-31324 	Davide Fiori 	06 Mar 2026
+	Yes 	Standard 	Initial Profile_Test_Documentum70 	Davide Fiori 	22 Jan 2026
+	Yes 	Standard 	Initial Profile_Test_Documentum99 	Davide Fiori 	22 Jan 2026
+	  	Standard 	Discovery non autenticata 	Matteo Faticanti 	23 Sep 2025
+	  	Standard 	Light Scan 	Matteo Faticanti 	13 Aug 2025
+	Yes 	PCI 	Payment Card Industry (PCI) Options 	System 	18 Dec 2019
