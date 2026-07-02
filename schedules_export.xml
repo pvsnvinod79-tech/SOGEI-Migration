@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<SIMPLE_RETURN>
+  <RESPONSE>
+    <DATETIME>2026-07-02T06:55:06Z</DATETIME>
+    <CODE>2510</CODE>
+    <TEXT>API URL https://qualysguard.qg.sogei.it/api/2.0/fo/schedule/scan/index.php is EOL. Use new API path https://qualysguard.qg.sogei.it/api/3.0/fo/schedule/scan/index.php </TEXT>
+  </RESPONSE>
+</SIMPLE_RETURN>
