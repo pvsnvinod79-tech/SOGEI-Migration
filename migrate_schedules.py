@@ -69,13 +69,13 @@ def export_schedules():
     check_credentials("SOURCE", SOURCE)
 
     print(f"\n[EXPORT] Connecting to: {SOURCE['base_url']}")
-    url = f"{SOURCE['base_url']}/api/2.0/fo/schedule/scan/"
-    params = {"action": "list", "active": "0,1"}
+    # active=0,1 removed — not supported on all POD versions (causes HTTP 400)
+    # action=list alone returns ALL schedules (active + inactive) by default
+    url = f"{SOURCE['base_url']}/api/2.0/fo/schedule/scan/?action=list"
 
     try:
         resp = requests.get(
             url,
-            params=params,
             auth=(SOURCE["username"], SOURCE["password"]),
             headers=HEADERS,
             timeout=120,
@@ -94,6 +94,7 @@ def export_schedules():
         sys.exit(1)
     except requests.exceptions.HTTPError as e:
         print(f"[ERROR] HTTP {resp.status_code}: {e}")
+        print(f"        Response body: {resp.text[:500]}")
         if resp.status_code == 401:
             print("        Authentication failed — check your username and password.")
         sys.exit(1)
@@ -105,10 +106,12 @@ def export_schedules():
 
     # Parse and show summary
     root = ET.fromstring(resp.text)
-    schedules = root.findall(".//SCHEDULE")
+    # API v3 returns <SCAN> tags inside <SCHEDULE_SCAN_LIST>
+    schedules = root.findall(".//SCAN")
 
     if not schedules:
         print("[EXPORT] No schedules found in source POD.")
+        print(f"[DEBUG] Raw response (first 1000 chars):\n{resp.text[:1000]}")
         return []
 
     print(f"[EXPORT] Found {len(schedules)} schedule(s).\n")
@@ -116,6 +119,7 @@ def export_schedules():
     rows = []
     for s in schedules:
         # ── Task Title tab (picture 5) ──
+        schedule_id    = safe_text(s, "ID")
         title          = safe_text(s, "TITLE")
         active         = safe_text(s, "ACTIVE", "1")   # 0=deactivated (picture 9 checked)
         user_login     = safe_text(s, "USER_LOGIN")
@@ -125,75 +129,79 @@ def export_schedules():
         scanner        = safe_text(s, "ISCANNER_NAME")
 
         # ── Target Hosts tab (picture 6) ──
-        asset_groups   = ", ".join(
-            [ag.text.strip() for ag in s.findall(".//ASSET_GROUP_TITLE") if ag.text]
+        # TARGET tag holds IP list directly as text in v3 API
+        target_ip    = safe_text(s, "TARGET")
+        if target_ip in ("Asset Tags Included", ""):
+            target_ip = ""
+        exclude_ip   = safe_text(s, "EXCLUDE_IP_PER_SCAN")
+        fqdns        = ""
+
+        # Asset Groups
+        asset_groups = ", ".join(
+            [ag.text.strip() for ag in s.findall(".//ASSET_GROUP_TITLE_LIST/ASSET_GROUP_TITLE") if ag.text]
         )
-        target_ip      = safe_text(s, "TARGET/IP")
-        exclude_ip     = safe_text(s, "TARGET/EXCLUDED_IP")
-        fqdns          = safe_text(s, "TARGET/FQDN")
+
+        # Asset Tags (for tag-based scans)
+        tag_include  = safe_text(s, "ASSET_TAGS/TAG_SET_INCLUDE")
+        tag_exclude  = safe_text(s, "ASSET_TAGS/TAG_SET_EXCLUDE")
+        tag_selector = safe_text(s, "ASSET_TAGS/TAG_INCLUDE_SELECTOR", "any")
 
         # ── Scheduling tab (picture 7) ──
-        start_date     = safe_text(s, "SCHEDULE/START_DATE")
-        start_hour     = safe_text(s, "SCHEDULE/START_HOUR", "0")
-        start_minute   = safe_text(s, "SCHEDULE/START_MINUTE", "0")
-        timezone       = safe_text(s, "SCHEDULE/TIME_ZONE/TIME_ZONE_CODE")
-        dst            = safe_text(s, "SCHEDULE/DST_SELECTED", "0")
-        occurrence     = safe_text(s, "SCHEDULE/OCCURRENCE_SELECTED", "")
+        start_date   = safe_text(s, "SCHEDULE/START_DATE_UTC")  # v3 uses START_DATE_UTC
+        start_hour   = safe_text(s, "SCHEDULE/START_HOUR", "0")
+        start_minute = safe_text(s, "SCHEDULE/START_MINUTE", "0")
+        timezone     = safe_text(s, "SCHEDULE/TIME_ZONE/TIME_ZONE_CODE")
+        dst          = safe_text(s, "SCHEDULE/DST_SELECTED", "0")
+        occurrence   = safe_text(s, "SCHEDULE/MAX_OCCURRENCE", "")  # v3 uses MAX_OCCURRENCE
 
-        # Recurrence type
-        recurrence_type = "once"
-        for rec in ["DAILY", "WEEKLY", "MONTHLY", "MONTHLY_BY_WEEKDAY"]:
-            if s.find(f".//SCHEDULE/{rec}") is not None:
+        # Recurrence type + frequency
+        recurrence_type  = "once"
+        recurrence_every = "1"
+        weekdays         = ""
+        for rec in ["DAILY", "WEEKLY", "MONTHLY"]:
+            recurrence_node = s.find(f"SCHEDULE/{rec}")
+            if recurrence_node is not None:
                 recurrence_type = rec.lower()
+                if rec == "DAILY":
+                    recurrence_every = recurrence_node.get("frequency_days", "1")
+                elif rec == "WEEKLY":
+                    recurrence_every = recurrence_node.get("frequency_weeks", "1")
+                    weekdays         = recurrence_node.get("weekdays", "")
+                elif rec == "MONTHLY":
+                    recurrence_every = recurrence_node.get("frequency_months", "1")
                 break
 
-        recurrence_every = safe_text(s, f"SCHEDULE/{recurrence_type.upper()}", "")
-        recurrence_node  = s.find(f".//SCHEDULE/{recurrence_type.upper()}")
-        recurrence_every = (
-            recurrence_node.get("every", "1")
-            if recurrence_node is not None else "1"
-        )
-
-        # ── Notifications tab (pictures 8-1, 8-2, 8-3) ──
-        notify_before_launch = safe_text(s, "NOTIFICATION/BEFORE_LAUNCH/ACTIVE", "0")
-        notify_on_complete   = safe_text(s, "NOTIFICATION/ON_FINISH/ACTIVE", "0")
-        notify_on_delay      = safe_text(s, "NOTIFICATION/ON_DELAY/ACTIVE", "0")
-        notify_on_skip       = safe_text(s, "NOTIFICATION/ON_SKIP/ACTIVE", "0")
-        notify_on_deactivate = safe_text(s, "NOTIFICATION/ON_DEACTIVATION/ACTIVE", "0")
-
-        schedule_id    = safe_text(s, "ID")
-
         row = {
-            "id":                    schedule_id,
-            "title":                 title,
-            "active":                active,            # 0 = deactivated (picture 9)
-            "user_login":            user_login,
-            "option_profile":        option_profile,
-            "network_id":            network_id,
-            "processing_priority":   priority,
-            "scanner":               scanner,
-            "asset_groups":          asset_groups,
-            "target_ip":             target_ip,
-            "exclude_ip":            exclude_ip,
-            "fqdns":                 fqdns,
-            "start_date":            start_date,
-            "start_hour":            start_hour,
-            "start_minute":          start_minute,
-            "timezone":              timezone,
-            "dst":                   dst,
-            "recurrence_type":       recurrence_type,
-            "recurrence_every":      recurrence_every,
-            "occurrence":            occurrence,
-            "notify_before_launch":  notify_before_launch,
-            "notify_on_complete":    notify_on_complete,
-            "notify_on_delay":       notify_on_delay,
-            "notify_on_skip":        notify_on_skip,
-            "notify_on_deactivate":  notify_on_deactivate,
+            "id":                schedule_id,
+            "title":             title,
+            "active":            active,
+            "user_login":        user_login,
+            "option_profile":    option_profile,
+            "network_id":        network_id,
+            "processing_priority": priority,
+            "scanner":           scanner,
+            "asset_groups":      asset_groups,
+            "target_ip":         target_ip,
+            "exclude_ip":        exclude_ip,
+            "fqdns":             fqdns,
+            "tag_include":       tag_include,
+            "tag_exclude":       tag_exclude,
+            "tag_selector":      tag_selector,
+            "start_date":        start_date,
+            "start_hour":        start_hour,
+            "start_minute":      start_minute,
+            "timezone":          timezone,
+            "dst":               dst,
+            "recurrence_type":   recurrence_type,
+            "recurrence_every":  recurrence_every,
+            "weekdays":          weekdays,
+            "occurrence":        occurrence,
         }
         rows.append(row)
 
         deactivated = "YES (deactivated)" if active == "0" else "no (active)"
-        print(f"  [{schedule_id}] {title:<35} | Active: {deactivated}")
+        target_info = f"Tags: {tag_include[:30]}" if tag_include else f"IPs/Groups"
+        print(f"  [{schedule_id}] {title:<40} | {deactivated} | {recurrence_type} | {target_info}")
 
     # Save CSV for human review
     with open(EXPORT_CSV_FILE, "w", newline="", encoding="utf-8") as f:
@@ -225,11 +233,31 @@ def import_schedules(rows=None):
             xml_content = f.read()
 
         root = ET.fromstring(xml_content)
-        schedules = root.findall(".//SCHEDULE")
+        schedules = root.findall(".//SCAN")
         print(f"[IMPORT] {len(schedules)} schedule(s) found in export file.\n")
 
         rows = []
         for s in schedules:
+            recurrence_type  = "daily"
+            recurrence_every = "1"
+            weekdays         = ""
+            for rec in ["DAILY", "WEEKLY", "MONTHLY"]:
+                recurrence_node = s.find(f"SCHEDULE/{rec}")
+                if recurrence_node is not None:
+                    recurrence_type = rec.lower()
+                    if rec == "DAILY":
+                        recurrence_every = recurrence_node.get("frequency_days", "1")
+                    elif rec == "WEEKLY":
+                        recurrence_every = recurrence_node.get("frequency_weeks", "1")
+                        weekdays         = recurrence_node.get("weekdays", "")
+                    elif rec == "MONTHLY":
+                        recurrence_every = recurrence_node.get("frequency_months", "1")
+                    break
+
+            target_ip = safe_text(s, "TARGET")
+            if target_ip in ("Asset Tags Included", ""):
+                target_ip = ""
+
             rows.append({
                 "id":                   safe_text(s, "ID"),
                 "title":                safe_text(s, "TITLE"),
@@ -240,22 +268,27 @@ def import_schedules(rows=None):
                 "processing_priority":  safe_text(s, "PROCESSING_PRIORITY", "0"),
                 "scanner":              safe_text(s, "ISCANNER_NAME"),
                 "asset_groups":         ", ".join(
-                    [ag.text.strip() for ag in s.findall(".//ASSET_GROUP_TITLE") if ag.text]
+                    [ag.text.strip() for ag in s.findall(".//ASSET_GROUP_TITLE_LIST/ASSET_GROUP_TITLE") if ag.text]
                 ),
-                "target_ip":            safe_text(s, "TARGET/IP"),
-                "exclude_ip":           safe_text(s, "TARGET/EXCLUDED_IP"),
-                "fqdns":                safe_text(s, "TARGET/FQDN"),
-                "start_date":           safe_text(s, "SCHEDULE/START_DATE"),
+                "target_ip":            target_ip,
+                "exclude_ip":           safe_text(s, "EXCLUDE_IP_PER_SCAN"),
+                "fqdns":                "",
+                "tag_include":          safe_text(s, "ASSET_TAGS/TAG_SET_INCLUDE"),
+                "tag_exclude":          safe_text(s, "ASSET_TAGS/TAG_SET_EXCLUDE"),
+                "tag_selector":         safe_text(s, "ASSET_TAGS/TAG_INCLUDE_SELECTOR", "any"),
+                "start_date":           safe_text(s, "SCHEDULE/START_DATE_UTC"),
                 "start_hour":           safe_text(s, "SCHEDULE/START_HOUR", "0"),
                 "start_minute":         safe_text(s, "SCHEDULE/START_MINUTE", "0"),
                 "timezone":             safe_text(s, "SCHEDULE/TIME_ZONE/TIME_ZONE_CODE"),
-                "recurrence_type":      "daily",
-                "recurrence_every":     "1",
-                "occurrence":           safe_text(s, "SCHEDULE/OCCURRENCE_SELECTED", ""),
+                "dst":                  safe_text(s, "SCHEDULE/DST_SELECTED", "0"),
+                "recurrence_type":      recurrence_type,
+                "recurrence_every":     recurrence_every,
+                "weekdays":             weekdays,
+                "occurrence":           safe_text(s, "SCHEDULE/MAX_OCCURRENCE", ""),
             })
 
     print(f"[IMPORT] Connecting to DEST: {DEST['base_url']}\n")
-    url = f"{DEST['base_url']}/api/2.0/fo/schedule/scan/"
+    url = f"{DEST['base_url']}/api/3.0/fo/schedule/scan/"
     success, failed = 0, 0
 
     for row in rows:
@@ -272,35 +305,46 @@ def import_schedules(rows=None):
             "network_id":           row["network_id"],
         }
 
-        # Target hosts
+        # Target hosts — asset groups
         if row["asset_groups"]:
             payload["asset_group_title"] = row["asset_groups"]
+        # Target hosts — direct IPs
         if row["target_ip"]:
-            payload["ip"]               = row["target_ip"]
+            payload["ip"]                = row["target_ip"]
         if row["exclude_ip"]:
-            payload["exclude_ip"]       = row["exclude_ip"]
-        if row["fqdns"]:
-            payload["fqdn"]             = row["fqdns"]
+            payload["exclude_ip"]        = row["exclude_ip"]
+        # Target hosts — asset tags
+        if row.get("tag_include"):
+            payload["use_tags"]          = "1"
+            payload["tag_include_selector"] = row.get("tag_selector", "any")
+            payload["tag_set_include"]   = row["tag_include"]
+        if row.get("tag_exclude"):
+            payload["tag_set_exclude"]   = row["tag_exclude"]
 
         # Scheduling
         if row["start_date"]:
-            payload["start_date"]    = row["start_date"]
-        payload["start_hour"]        = row["start_hour"]
-        payload["start_minute"]      = row["start_minute"]
+            payload["start_date"]        = row["start_date"]
+        payload["start_hour"]            = row["start_hour"]
+        payload["start_minute"]          = row["start_minute"]
         if row.get("timezone"):
-            payload["time_zone_code"]= row["timezone"]
+            payload["time_zone_code"]    = row["timezone"]
+        if row.get("dst"):
+            payload["dst_selected"]      = row["dst"]
 
         recurrence = row.get("recurrence_type", "daily").lower()
         if recurrence == "daily":
-            payload["occurrence"]    = "daily"
-            payload["daily_freq"]    = row.get("recurrence_every", "1")
+            payload["occurrence"]        = "daily"
+            payload["daily_freq"]        = row.get("recurrence_every", "1")
         elif recurrence == "weekly":
-            payload["occurrence"]    = "weekly"
+            payload["occurrence"]        = "weekly"
+            payload["weekly_freq"]       = row.get("recurrence_every", "1")
+            if row.get("weekdays"):
+                payload["day_of_week"]   = row["weekdays"]
         elif recurrence == "monthly":
-            payload["occurrence"]    = "monthly"
+            payload["occurrence"]        = "monthly"
 
         if row.get("occurrence"):
-            payload["end_after"]     = row["occurrence"]
+            payload["end_after"]         = row["occurrence"]
 
         try:
             resp = requests.post(
@@ -309,6 +353,7 @@ def import_schedules(rows=None):
                 auth=(DEST["username"], DEST["password"]),
                 headers=HEADERS,
                 timeout=60,
+                verify=False,
             )
             resp.raise_for_status()
             resp_xml = ET.fromstring(resp.text)
