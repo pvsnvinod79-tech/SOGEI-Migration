@@ -1,1 +1,11 @@
-Test-NetConnection -ComputerName qualysguard.qg.sogei.it -Port 443
+    print(f"\n[EXPORT] Connecting to: {SOURCE['base_url']}")
+    url = f"{SOURCE['base_url']}/api/2.0/fo/schedule/scan/?action=list&active=0,1"
+
+    try:
+        resp = requests.get(
+            url,
+            auth=(SOURCE["username"], SOURCE["password"]),
+            headers=HEADERS,
+            timeout=120,
+            verify=False,
+        )
