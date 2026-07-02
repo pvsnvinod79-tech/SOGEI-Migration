@@ -12,6 +12,8 @@ Usage:
 """
 
 import requests
+import requests.packages.urllib3
+requests.packages.urllib3.disable_warnings()
 import xml.etree.ElementTree as ET
 import csv
 import argparse
@@ -76,11 +78,19 @@ def export_schedules():
             params=params,
             auth=(SOURCE["username"], SOURCE["password"]),
             headers=HEADERS,
-            timeout=60,
+            timeout=120,
+            verify=False,
         )
         resp.raise_for_status()
-    except requests.exceptions.ConnectionError:
-        print(f"[ERROR] Cannot connect to {SOURCE['base_url']}. Check the URL and your network.")
+    except requests.exceptions.SSLError as e:
+        print(f"[ERROR] SSL error connecting to {SOURCE['base_url']}: {e}")
+        sys.exit(1)
+    except requests.exceptions.ConnectionError as e:
+        print(f"[ERROR] Cannot connect to {SOURCE['base_url']}.")
+        print(f"        Detail: {e}")
+        sys.exit(1)
+    except requests.exceptions.Timeout:
+        print(f"[ERROR] Connection timed out after 120s. Check VPN / network access.")
         sys.exit(1)
     except requests.exceptions.HTTPError as e:
         print(f"[ERROR] HTTP {resp.status_code}: {e}")
