@@ -26,9 +26,9 @@ from datetime import datetime
 # ─────────────────────────────────────────────────────────────────────────────
 
 SOURCE = {
-    "base_url": os.getenv("SOURCE_URL", "https://qualysguard.qg.sogei.it"),
-    "username": os.getenv("SOURCE_USER", "sgesp_kt"),
-    "password": os.getenv("SOURCE_PASS", "osFa4cA!22"),
+    "base_url": os.getenv("SOURCE_URL", "https://qualysguard.qg1.apps.qualys.ae"),
+    "username": os.getenv("SOURCE_USER", "YOUR_SOURCE_USERNAME"),
+    "password": os.getenv("SOURCE_PASS", "YOUR_SOURCE_PASSWORD"),
 }
 
 DEST = {
@@ -69,7 +69,9 @@ def export_schedules():
     check_credentials("SOURCE", SOURCE)
 
     print(f"\n[EXPORT] Connecting to: {SOURCE['base_url']}")
-    url = f"{SOURCE['base_url']}/api/2.0/fo/schedule/scan/?action=list&active=0,1"
+    # active=0,1 removed — not supported on all POD versions (causes HTTP 400)
+    # action=list alone returns ALL schedules (active + inactive) by default
+    url = f"{SOURCE['base_url']}/api/2.0/fo/schedule/scan/?action=list"
 
     try:
         resp = requests.get(
@@ -92,6 +94,7 @@ def export_schedules():
         sys.exit(1)
     except requests.exceptions.HTTPError as e:
         print(f"[ERROR] HTTP {resp.status_code}: {e}")
+        print(f"        Response body: {resp.text[:500]}")
         if resp.status_code == 401:
             print("        Authentication failed — check your username and password.")
         sys.exit(1)
